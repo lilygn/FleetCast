@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import './StationViewer.css';
-import api from './api';
 
 function StationViewer() {
   const [stationId, setStationId] = useState("GS-1");
@@ -9,7 +8,7 @@ function StationViewer() {
 
   useEffect(() => {
     const fetchData = () =>{
-      api.get(`/api/station/${stationId}`)
+      axios.get(`/api/station/${stationId}`)
       .then(res => setData(res.data.satellites))
       .catch(err => console.error("Failed to fetch:", err))
     };
