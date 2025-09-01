@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tidb-ca-configmap
+data:
+  tidb-ca.pem: |-
+{{ .Files.Get "tidb-ca.pem" | indent 4 }}

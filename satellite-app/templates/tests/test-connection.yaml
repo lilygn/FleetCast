@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "satellite-app.fullname" . }}-test-connection"
+  labels:
+    {{- include "satellite-app.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ["{{ include "satellite-app.fullname" . }}-frontend:{{ .Values.frontend.service.port }}"]
+  restartPolicy: Never
