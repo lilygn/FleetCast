@@ -38,6 +38,7 @@ credentials.json
 # Python test cache
 .pytest_cache/
 .coverage
+registry.tar
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
