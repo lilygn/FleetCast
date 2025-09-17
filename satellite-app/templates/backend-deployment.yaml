@@ -37,6 +37,14 @@ spec:
               value: {{ .Values.tidb.password | quote }}
             - name: TIDB_DATABASE
               value: {{ .Values.tidb.database | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: fleetcast
+            - name: OTEL_TRACES_EXPORTER
+              value: jaeger
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: http://jaeger-agent.social-network.svc.cluster.local:14268/api/traces
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=dev,service.version=latest
           volumeMounts:
             - name: tidb-ca-volume
               mountPath: /app/tidb-ca.pem
