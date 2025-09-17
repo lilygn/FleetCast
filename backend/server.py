@@ -7,15 +7,39 @@ from datetime import datetime
 import os 
 import ssl
 from dotenv import load_dotenv
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from opentelemetry import trace
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+
 load_dotenv()
 
 app = FastAPI()
+#PROMETHEUS SETUP
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
+#JAEGER:
+provider = TracerProvider(
+    resource=Resource.create({"service.name": "fleetcast"})
+)
+trace.set_tracer_provider(provider)
+jaeger_exporter = JaegerExporter(
+    collector_endpoint="http://jaeger-agent.social-network.svc.cluster.local:14268/api/traces",
+)
+
+span_processor = BatchSpanProcessor(jaeger_exporter)
+provider.add_span_processor(span_processor)
+tracer = trace.get_tracer(__name__)
+
+
 TIDB_HOST = "basic-tidb.tidb-cluster.svc.cluster.local"
 TIDB_USER = "root"
 TIDB_PASSWORD = ""
 TIDB_DATABASE = "satellite_sim"
 
-# Allow React frontend to talk to FastAPI backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:3001", "http://orbital.local:8080", "127.0.0.1:3000"],  # adjust as needed
