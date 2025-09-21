@@ -9,7 +9,7 @@ function Dashboard() {
   // Fetch summary using Axios
   useEffect(() => {
     const fetchData = () => {
-        axios.get(`'http://localhost:3000/api/dashboard`)
+        axios.get(`/api/dashboard`)
   .then(res => {
     console.log("Dashboard data:", res.data);  // <-- Add this
     setSummary(res.data);

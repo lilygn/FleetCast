@@ -13,6 +13,8 @@ spec:
     metadata:
       labels:
         app: {{ include "satellite-app.name" . }}-backend
+      annotations:
+{{- toYaml .Values.backend.annotations | nindent 8 }}
     spec:
       containers:
         - name: backend
@@ -42,7 +44,7 @@ spec:
             - name: OTEL_TRACES_EXPORTER
               value: jaeger
             - name: OTEL_EXPORTER_JAEGER_ENDPOINT
-              value: http://jaeger-agent.social-network.svc.cluster.local:14268/api/traces
+              value: http://jaeger-agent.observe.svc.cluster.local:14268/api/traces
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: deployment.environment=dev,service.version=latest
           volumeMounts:

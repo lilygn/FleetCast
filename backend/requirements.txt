@@ -3,7 +3,13 @@ uvicorn[standard]
 pymysql
 apscheduler
 certifi
-prometheus-fastapi-instrumentator>=5.9.1
-opentelemetry-distro 
+requests
+prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator
+opentelemetry-distro
 opentelemetry-exporter-jaeger
-opentelemetry-bootstrap 
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+deprecated

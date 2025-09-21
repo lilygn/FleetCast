@@ -14,26 +14,24 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 load_dotenv()
+# ... your existing imports and setup remain unchanged ...
 
 app = FastAPI()
-#PROMETHEUS SETUP
+# PROMETHEUS SETUP (unchanged)
 instrumentator = Instrumentator()
 instrumentator.instrument(app).expose(app)
-#JAEGER:
-provider = TracerProvider(
-    resource=Resource.create({"service.name": "fleetcast"})
-)
-trace.set_tracer_provider(provider)
-jaeger_exporter = JaegerExporter(
-    collector_endpoint="http://jaeger-agent.social-network.svc.cluster.local:14268/api/traces",
-)
 
-span_processor = BatchSpanProcessor(jaeger_exporter)
-provider.add_span_processor(span_processor)
+
+
 tracer = trace.get_tracer(__name__)
-
 
 TIDB_HOST = "basic-tidb.tidb-cluster.svc.cluster.local"
 TIDB_USER = "root"
@@ -42,81 +40,114 @@ TIDB_DATABASE = "satellite_sim"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://orbital.local:8080", "127.0.0.1:3000"],  # adjust as needed
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://orbital.local:8080", "127.0.0.1:3000"],  # unchanged
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 scheduler = BackgroundScheduler()
 
 def scheduled_simulation():
-    print("Running scheduled simulation")
-    simulate_and_log()
-    
+    with tracer.start_as_current_span("scheduled_simulation"):
+        print("Running scheduled simulation")
+        simulate_and_log()
 
-scheduler.add_job(scheduled_simulation, 'interval', seconds=10)  # Every 10 seconds
-scheduler.start()
+def scheduled_dashboard_job():
+    data = get_dashboard_summary()
+    print("[JOB] /api/dashboard ran at", datetime.utcnow().isoformat(), "->", {k: data[k] for k in ("totalTelemetry","lowBattery","errorState","activeContacts")})
+
+def scheduled_station_job():
+    for sid in ["GS-1", "GS-2", "GS-3"]:
+        data = get_station_data(sid)
+        print(f"[JOB] /api/station/{sid} ran at", datetime.utcnow().isoformat(), "-> count:", len(data.get("satellites", [])))
+
+
+@app.on_event("startup")
+def start_jobs():
+    scheduler.add_job(scheduled_simulation, IntervalTrigger(seconds=10), coalesce=True, max_instances=1)
+    scheduler.add_job(scheduled_dashboard_job, IntervalTrigger(seconds=15), coalesce=True, max_instances=1)
+    scheduler.add_job(scheduled_station_job, IntervalTrigger(seconds=20), coalesce=True, max_instances=1)
+    scheduler.start()
+    print("[SCHEDULER] started")
+
+@app.on_event("shutdown")
+def stop_jobs():
+    scheduler.shutdown(wait=False)
+    print("[SCHEDULER] stopped")
+
 
 @app.get("/api/simulate")
 def run_simulation():
-    simulate_and_log()
+    with tracer.start_as_current_span("simulate_and_log"):
+        simulate_and_log()
     return {"message": "Simulation completed and data logged to TiDB"}
 
 @app.get("/api/dashboard")
 def get_dashboard_summary():
     ssl_ca_path = os.path.join(os.path.dirname(__file__), 'tidb-ca.pem')
+    with tracer.start_as_current_span("fetch_dashboard_data") as span:
+        conn = pymysql.connect(
+            host=TIDB_HOST,
+            port=4000,
+            user=TIDB_USER,
+            password=TIDB_PASSWORD,
+            database=TIDB_DATABASE,
+            ssl={
+                "ca": "/app/tidb-ca.pem",
+                "check_hostname": True,
+                "verify_mode": ssl.CERT_REQUIRED
+            }
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM telemetry")
+        total_telemetry = cursor.fetchone()[0]
+        span.set_attribute("db.system", "mysql")
+        span.set_attribute("db.operation", "SELECT COUNT(*) FROM telemetry")
 
-    conn = pymysql.connect(
-  host=TIDB_HOST,
-    port=4000,
-    user=TIDB_USER,
-    password=TIDB_PASSWORD,
-    database=TIDB_DATABASE,
-    ssl={
-        "ca": "/app/tidb-ca.pem",
-        "check_hostname": True,
-        "verify_mode": ssl.CERT_REQUIRED
-    }
-)
-    cursor = conn.cursor()
+        with tracer.start_as_current_span("query_low_battery") as span:
+            cursor.execute("""
+                SELECT COUNT(*) FROM telemetry t
+                INNER JOIN (
+                    SELECT satellite_id, MAX(timestamp) AS latest_time
+                    FROM telemetry
+                    GROUP BY satellite_id
+                ) latest ON t.satellite_id = latest.satellite_id AND t.timestamp = latest.latest_time
+                WHERE t.battery_level < 30
+            """)
+            low_battery = cursor.fetchone()[0]
+            span.set_attribute("db.system", "mysql")
+            span.set_attribute("db.operation", "low_battery_latest")
+            span.set_attribute("telemetry.low_battery_count", low_battery)
 
-    # Total telemetry logs ever recorded
-    cursor.execute("SELECT COUNT(*) FROM telemetry")
-    total_telemetry = cursor.fetchone()[0]
+        with tracer.start_as_current_span("query_error_states") as span:
+            cursor.execute("""
+                SELECT COUNT(*) FROM telemetry t
+                INNER JOIN (
+                    SELECT satellite_id, MAX(timestamp) AS latest_time
+                    FROM telemetry
+                    GROUP BY satellite_id
+                ) latest ON t.satellite_id = latest.satellite_id AND t.timestamp = latest.latest_time
+                WHERE t.status = 'ERROR'
+            """)
+            errors = cursor.fetchone()[0]
+            span.set_attribute("db.system", "mysql")
+            span.set_attribute("db.operation", "error_latest")
+            span.set_attribute("telemetry.error_count", errors)
 
-    # Only use the most recent telemetry per satellite
-    cursor.execute("""
-        SELECT COUNT(*) FROM telemetry t
-        INNER JOIN (
-            SELECT satellite_id, MAX(timestamp) AS latest_time
-            FROM telemetry
-            GROUP BY satellite_id
-        ) latest ON t.satellite_id = latest.satellite_id AND t.timestamp = latest.latest_time
-        WHERE t.battery_level < 30
-    """)
-    low_battery = cursor.fetchone()[0]
-
-    cursor.execute("""
-        SELECT COUNT(*) FROM telemetry t
-        INNER JOIN (
-            SELECT satellite_id, MAX(timestamp) AS latest_time
-            FROM telemetry
-            GROUP BY satellite_id
-        ) latest ON t.satellite_id = latest.satellite_id AND t.timestamp = latest.latest_time
-        WHERE t.status = 'ERROR'
-    """)
-    errors = cursor.fetchone()[0]
-
-    # Only count currently active assigned contacts (end time is in future)
-    cursor.execute("""
-    SELECT COUNT(DISTINCT satellite_id)
-    FROM contact_windows
-    WHERE assigned = TRUE AND end_time > UTC_TIMESTAMP()
-""")
-    active_contacts = cursor.fetchone()[0]
-
-    cursor.close()
-    conn.close()
+        with tracer.start_as_current_span("query_active_contacts") as span:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT satellite_id)
+                FROM contact_windows
+                WHERE assigned = TRUE AND end_time > UTC_TIMESTAMP()
+            """)
+            active_contacts = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+            span.set_attribute("db.system", "mysql")
+            span.set_attribute("db.operation", "active_contacts_now")
+            span.set_attribute("contacts.active_count", active_contacts)
 
     return {
         "totalSatellites": 100,
@@ -128,68 +159,68 @@ def get_dashboard_summary():
 
 @app.get("/api/station/{station_id}")
 def get_station_data(station_id: str):
-    ssl_ca_path = os.path.join(os.path.dirname(__file__), 'tidb-ca.pem') 
+    with tracer.start_as_current_span("get_station_data"):
+        ssl_ca_path = os.path.join(os.path.dirname(__file__), 'tidb-ca.pem')
+        conn = pymysql.connect(
+            host=TIDB_HOST,
+            port=4000,
+            user=TIDB_USER,
+            password=TIDB_PASSWORD,
+            database=TIDB_DATABASE,
+            ssl={
+                "ca": "/app/tidb-ca.pem",
+                "check_hostname": True,
+                "verify_mode": ssl.CERT_REQUIRED
+            }
+        )
+        cursor = conn.cursor()
 
-    conn = pymysql.connect(
-    host=TIDB_HOST,
-    port=4000,
-    user=TIDB_USER,
-    password=TIDB_PASSWORD,
-    database=TIDB_DATABASE,
-    ssl={
-        "ca": "/app/tidb-ca.pem",
-        "check_hostname": True,
-        "verify_mode": ssl.CERT_REQUIRED
-    }
-)
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT 
-    sub.ground_station_id, 
-    sub.satellite_id,
-    sub.battery_level,
-    sub.temperature,
-    sub.status,
-    sub.timestamp
-FROM (
-    SELECT 
-        cw.ground_station_id, 
-        cw.satellite_id,
-        t.battery_level,
-        t.temperature,
-        t.status,
-        t.timestamp,
-        ROW_NUMBER() OVER (
-            PARTITION BY cw.satellite_id 
-            ORDER BY t.timestamp DESC
-        ) AS rn
-    FROM contact_windows cw
-    JOIN telemetry t ON cw.satellite_id = t.satellite_id 
-                     AND cw.ground_station_id = t.ground_station_id
-    WHERE cw.assigned = TRUE 
-      AND cw.end_time > UTC_TIMESTAMP()
-      AND cw.ground_station_id = %s
-) sub
-WHERE sub.rn = 1
+        with tracer.start_as_current_span("query_station_latest"):
+            cursor.execute("""
+                SELECT 
+                    sub.ground_station_id, 
+                    sub.satellite_id,
+                    sub.battery_level,
+                    sub.temperature,
+                    sub.status,
+                    sub.timestamp
+                FROM (
+                    SELECT 
+                        cw.ground_station_id, 
+                        cw.satellite_id,
+                        t.battery_level,
+                        t.temperature,
+                        t.status,
+                        t.timestamp,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY cw.satellite_id 
+                            ORDER BY t.timestamp DESC
+                        ) AS rn
+                    FROM contact_windows cw
+                    JOIN telemetry t ON cw.satellite_id = t.satellite_id 
+                                     AND cw.ground_station_id = t.ground_station_id
+                    WHERE cw.assigned = TRUE 
+                      AND cw.end_time > UTC_TIMESTAMP()
+                      AND cw.ground_station_id = %s
+                ) sub
+                WHERE sub.rn = 1
+            """, (station_id,))
 
-""", (station_id,))
+            results = cursor.fetchall()
+            station_data = [{
+                "satellite_id": row[1],
+                "battery_level": row[2],
+                "temperature": row[3],
+                "status": row[4],
+                "timestamp": row[5]
+            } for row in results]
 
-    
-    results = cursor.fetchall()
-    station_data = []
-    for row in results:
-        station_data.append({
-            "satellite_id": row[1],
-            "battery_level": row[2],
-            "temperature": row[3],
-            "status": row[4],
-            "timestamp": row[5]
-        })
-    
-    cursor.close()
-    conn.close()
+        cursor.close()
+        conn.close()
+
     return {"station_id": station_id, "satellites": station_data}
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
+    with tracer.start_as_current_span("health_check"):
+        return {"status": "ok"}

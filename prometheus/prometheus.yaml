@@ -2,35 +2,26 @@ server:
   service:
     type: NodePort
     nodePort: 32000
-  persistent:
+  persistentVolume:
     enabled: true
     storageClass: openebs-hostpath
-    size: 10Gi
+    size: 8Gi
   extraFlags:
-    - web.enable-lifecycle   # correct (not ----web.enable-lifecycle)
-
-# Important: do NOT put a top-level `global:` here.
-# Only inside serverFiles.prometheus.yml if you want to override
-# (we removed it to avoid duplicates)
+    - web.enable-lifecycle   
 
 configmapReload:
   prometheus:
-    # leave empty to avoid adding a duplicate --listen-address
     extraArgs: {}
 
 serverFiles:
   prometheus.yml:
-    # Note: no "global:" here, because chart already injects defaults (1m)
-    # If you want 15s, add scrape_interval under each job individually.
-
+   
     scrape_configs:
-      # Scrape Prometheus itself
       - job_name: prometheus
         scrape_interval: 15s
         static_configs:
           - targets: ['localhost:9090']
 
-      # Scrape kubelet cAdvisor on each node
       - job_name: kubernetes-cadvisor
         scrape_interval: 15s
         scheme: https
@@ -50,7 +41,6 @@ serverFiles:
           - source_labels: [__meta_kubernetes_node_name]
             target_label: node
 
-      # Scrape node-exporter (requires node-exporter installed)
       - job_name: node-exporter
         scrape_interval: 15s
         kubernetes_sd_configs:
@@ -64,7 +54,6 @@ serverFiles:
             target_label: __address__
             replacement: $1:9100
 
-      # Scrape annotated pods
       - job_name: kubernetes-pods
         scrape_interval: 15s
         kubernetes_sd_configs:

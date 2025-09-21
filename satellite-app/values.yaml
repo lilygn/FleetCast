@@ -4,7 +4,7 @@ frontend:
   image:
     repository: lilygniedz/orbital-frontend
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   service:
     type: ClusterIP
@@ -13,13 +13,13 @@ frontend:
   livenessProbe:
     httpGet:
       path: /
-      port: http
+      port: 80
     initialDelaySeconds: 10
     periodSeconds: 30
   readinessProbe:
     httpGet:
       path: /
-      port: http
+      port: 80
     initialDelaySeconds: 5
     periodSeconds: 10
 
@@ -37,6 +37,10 @@ frontend:
 
 # === BACKEND CONFIG ===
 backend:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "5000"
   replicaCount: 2
   image:
     repository: lilygniedz/satellite-backend
@@ -71,6 +75,7 @@ backend:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+   
 
 # === TiDB Secrets  ===
 tidb:
@@ -85,18 +90,17 @@ tidbCAConfigMapName: tidb-ca-configmap
 ingress:
   enabled: true
   className: "nginx"
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  annotations: {}
   hosts:
-    - host: orbital-alt.local
+    - host: orbital.local
       paths:
-        - path: /()(.*)
-          pathType: ImplementationSpecific
+        - path: /
+          pathType: Prefix
           backend:
             serviceName: satellite-app-frontend
             servicePort: 80
-        - path: /api(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /api
+          pathType: Prefix
           backend:
             serviceName: satellite-app-backend
             servicePort: 5000

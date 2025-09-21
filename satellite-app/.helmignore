@@ -1,8 +1,5 @@
-# Patterns to ignore when building packages.
-# This supports shell glob matching, relative path matching, and
-# negation (prefixed with !). Only one pattern per line.
+# OS / VCS / IDE
 .DS_Store
-# Common VCS dirs
 .git/
 .gitignore
 .bzr/
@@ -10,14 +7,51 @@
 .hg/
 .hgignore
 .svn/
-# Common backup files
 *.swp
 *.bak
 *.tmp
 *.orig
 *~
-# Various IDEs
 .project
 .idea/
 *.tmproj
 .vscode/
+
+# BIG dirs from web builds / package managers
+node_modules/
+dist/
+build/
+.out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+coverage/
+tmp/
+public/build/
+public/assets/
+assets/
+static/
+
+# Archives & binaries
+*.tgz
+*.zip
+*.tar
+*.tar.gz
+*.gz
+*.7z
+*.rar
+*.iso
+*.bin
+
+# Media & large docs (keep only if truly required by templates)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pdf
+*.mp4
+*.mov
+
+
