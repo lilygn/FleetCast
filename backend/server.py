@@ -22,16 +22,27 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 load_dotenv()
-# ... your existing imports and setup remain unchanged ...
 
 app = FastAPI()
-# PROMETHEUS SETUP (unchanged)
 instrumentator = Instrumentator()
 instrumentator.instrument(app).expose(app)
 
+resource = Resource.create({"service.name": "fleetcast-backend"})
 
+provider = TracerProvider(resource=resource)
+trace.set_tracer_provider(provider)
+jaeger_exporter = JaegerExporter(
+    agent_host_name="jaeger-agent.observe.svc.cluster.local",
+    agent_port=6831,
+)
 
+span_processor = BatchSpanProcessor(jaeger_exporter)
+provider.add_span_processor(span_processor)
+
+FastAPIInstrumentor.instrument_app(app)
+RequestsInstrumentor().instrument()
 tracer = trace.get_tracer(__name__)
+
 
 TIDB_HOST = "basic-tidb.tidb-cluster.svc.cluster.local"
 TIDB_USER = "root"
@@ -142,6 +153,7 @@ def get_dashboard_summary():
                 FROM contact_windows
                 WHERE assigned = TRUE AND end_time > UTC_TIMESTAMP()
             """)
+        
             active_contacts = cursor.fetchone()[0]
             cursor.close()
             conn.close()
