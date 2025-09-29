@@ -131,6 +131,7 @@ def get_dashboard_summary():
             span.set_attribute("db.system", "mysql")
             span.set_attribute("db.operation", "low_battery_latest")
             span.set_attribute("telemetry.low_battery_count", low_battery)
+            #span.add_event("Low battery query executed")
 
         with tracer.start_as_current_span("query_error_states") as span:
             cursor.execute("""
@@ -146,6 +147,7 @@ def get_dashboard_summary():
             span.set_attribute("db.system", "mysql")
             span.set_attribute("db.operation", "error_latest")
             span.set_attribute("telemetry.error_count", errors)
+            #span.add_event("Error state query executed")
 
         with tracer.start_as_current_span("query_active_contacts") as span:
             cursor.execute("""
@@ -160,6 +162,7 @@ def get_dashboard_summary():
             span.set_attribute("db.system", "mysql")
             span.set_attribute("db.operation", "active_contacts_now")
             span.set_attribute("contacts.active_count", active_contacts)
+           # span.add_event("Active contacts query executed")
 
     return {
         "totalSatellites": 100,
@@ -171,7 +174,7 @@ def get_dashboard_summary():
 
 @app.get("/api/station/{station_id}")
 def get_station_data(station_id: str):
-    with tracer.start_as_current_span("get_station_data"):
+    with tracer.start_as_current_span("get_station_data") as span:
         ssl_ca_path = os.path.join(os.path.dirname(__file__), 'tidb-ca.pem')
         conn = pymysql.connect(
             host=TIDB_HOST,
@@ -186,8 +189,10 @@ def get_station_data(station_id: str):
             }
         )
         cursor = conn.cursor()
-
-        with tracer.start_as_current_span("query_station_latest"):
+        span.set_attribute("db.operation", "get_station_data")
+        span.set_attribute("db.system", "mysql")
+        span.set_attribute("station.id", station_id)
+        with tracer.start_as_current_span("query_station_latest") as span:
             cursor.execute("""
                 SELECT 
                     sub.ground_station_id, 
@@ -226,7 +231,10 @@ def get_station_data(station_id: str):
                 "status": row[4],
                 "timestamp": row[5]
             } for row in results]
-
+            span.set_attribute("db.system", "mysql")
+            span.set_attribute("db.operation", "station_latest_telemetry")
+            span.set_attribute("station.satellite_count", len(station_data))
+           # span.add_event("Station data query executed")
         cursor.close()
         conn.close()
 
@@ -234,5 +242,7 @@ def get_station_data(station_id: str):
 
 @app.get("/api/health")
 def health_check():
-    with tracer.start_as_current_span("health_check"):
+    with tracer.start_as_current_span("health_check") as span:
+        span.set_attribute("service.status", "healthy")
         return {"status": "ok"}
+    
