@@ -70,7 +70,7 @@ def generate_all_contact_windows(satellites, ground_stations, timestamp=None):
 
     all_contact_windows = []
     shuffled = satellites.copy()
-    random.shuffle(shuffled)  # Shuffle to diversify GS assignments
+    random.shuffle(shuffled)  
 
     for satellite in shuffled:
         contact_windows = generate_contact_windows(satellite, ground_stations, timestamp)
