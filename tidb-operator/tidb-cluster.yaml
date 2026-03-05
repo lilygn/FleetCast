@@ -14,17 +14,25 @@ spec:
     storageClassName: openebs-hostpath
     requests:
       storage: "1Gi"
+      cpu: "500m"
+      memory: "512Mi"
   tidb:
     replicas: 1
-    config: {}
+    config:
+      performance:
+        max-procs: 4
     service:
       type: ClusterIP
     storageClassName: openebs-hostpath
     requests:
       storage: "1Gi"
+      cpu: "500m"
+      memory: "1Gi"
   tikv:
     replicas: 1
     config: {}
     storageClassName: openebs-hostpath
     requests:
       storage: "1Gi"
+      cpu: "500m"
+      memory: "1Gi"
