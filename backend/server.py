@@ -81,12 +81,12 @@ def start_jobs():
     scheduler.add_job(scheduled_dashboard_job, IntervalTrigger(seconds=15), coalesce=True, max_instances=1)
     scheduler.add_job(scheduled_station_job, IntervalTrigger(seconds=20), coalesce=True, max_instances=1)
     scheduler.start()
-    print("[SCHEDULER] started YIMING")
+    print("[SCHEDULER] started")
 
 @app.on_event("shutdown")
 def stop_jobs():
     scheduler.shutdown(wait=False)
-    print("[SCHEDULER] stopped YIMING")
+    print("[SCHEDULER] stopped")
 
 
 @app.get("/api/simulate")

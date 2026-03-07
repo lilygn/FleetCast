@@ -7,11 +7,11 @@ entries:
     description: A Helm chart for deploying the Orbital frontend and backend on Kubernetes.
     digest: 36a0f0fbb5ea598cc86d944a01aad7b38ffaf8b667316dcef32b818dccf51e96
     maintainers:
-    - email: yiming34@illinois.edu
-      name: Yiming Su
+    - email: lilyg3@illinois.edu
+      name: Lily Gniedziejko
     name: satellite-app
     type: application
     urls:
-    - https://yimingsu01.github.io/FleetCast/satellite-app-0.1.0.tgz
+    - https://lilygn.github.io/FleetCast/satellite-app-0.1.0.tgz
     version: 0.1.0
 generated: "2026-02-19T22:45:32.135065-06:00"

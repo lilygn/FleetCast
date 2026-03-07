@@ -2,7 +2,7 @@
 frontend:
   replicaCount: 2
   image:
-    repository: yimingsu01/orbital-frontend
+    repository: lilygniedz/orbital-frontend
     tag: latest
     pullPolicy: Always
 
@@ -43,7 +43,7 @@ backend:
     prometheus.io/port: "5000"
   replicaCount: 2
   image:
-    repository: yimingsu01/satellite-backend
+    repository: lilygniedz/satellite-backend
     tag: latest
     pullPolicy: IfNotPresent
 
