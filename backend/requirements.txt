@@ -10,6 +10,6 @@ opentelemetry-distro
 opentelemetry-exporter-jaeger
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
-opentelemetry-sdk
+opentelemetry-sdk==1.39.1
 opentelemetry-exporter-otlp
 deprecated
